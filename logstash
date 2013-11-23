@@ -1,0 +1,79 @@
+#!/bin/bash
+set -o errexit -o nounset -o pipefail
+function -h {
+cat <<USAGE
+ USAGE: logstash (--jar <logstash.jar>)? <argument-for-jar>*
+        logstash system_agent <option>*
+        logstash system_web   <option>*
+
+  Run Logstash, logging to Syslog.
+
+  In the second form, runs the Logstash log aggregation agent (logs to Syslog
+  tag 'logstash'). The configuration is loaded from $agent_conf.
+
+  In the third form, starts the Kibana web UI (logs to Syslog tag 'kibana').
+  Options to Kibana (--address or --port) are stored as individual files
+  (address or port) in $web_conf.
+
+  If you would like to pass the Jar to be run, do so with --jar. If the Jar is
+  not supplied, the script assumes the Jar has been concatenated to it and
+  will supply its own path to Java.
+
+USAGE
+}; function --help { -h ;}
+export LC_ALL=en_US.UTF-8
+
+self="$(cd "$(dirname "$0")" && pwd -P)"/"$(basename "$0")"
+jar="$self"
+agent_conf=/etc/logstash/agent.d/
+web_conf=/etc/logstash/web/
+
+function main {
+  if [[ ${1:-} = --jar ]]
+  then jar="$2" ; shift 2
+  fi
+  "$@"
+}
+
+function system_agent {
+  logged logstash run_jar agent -f "$agent_conf" "$@"
+}
+
+function system_web {
+  local cmd=( run_jar web )
+  if [[ -d $web_conf ]]
+  then
+    while read -u 9 -r -d '' path
+    do
+      local name="${path#./}"
+      cmd+=( "--$name" "$(cat "$web_conf/$name")" )
+    done 9< <(cd "$web_conf" && find . -type f -not -name '.*' -print0)
+  fi
+  logged kibana "${cmd[@]}" "$@"
+}
+
+function run_jar {
+  local log_format='%2$s %5$s%6$s%n' # Class name, message, exception
+  ulimit -n 8192
+  local vm_opts=( -Xmx512m
+                  -Djava.library.path=/usr/local/lib
+                  -Djava.util.logging.SimpleFormatter.format="$log_format" )
+  exec java "${vm_opts[@]}" -jar "$jar" "$@"
+}
+
+function logged {
+  local token="$1[$$]" ; shift
+  exec 1> >(exec logger -p user.info   -t "$token")
+  exec 2> >(exec logger -p user.notice -t "$token")
+  "$@"
+}
+
+function msg { out "$*" >&2 ;}
+function err { local x=$? ; msg "$*" ; return $(( $x == 0 ? 1 : $x )) ;}
+function out { printf '%s\n' "$*" ;}
+
+if [[ ${1:-} ]] && declare -F | cut -d' ' -f3 | fgrep -qx -- "${1:-}"
+then "$@"
+else main "$@"
+fi
+exit

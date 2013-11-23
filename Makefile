@@ -1,38 +1,44 @@
-# Note that the prefix affects the init scripts as well.
-prefix := usr/
-app := logstash
-prefix := net.logstash # For OS X. 
+app    := logstash
+domain := net.logstash # For OS X.
+jar    := logstash-1.2.2-flatjar.jar
 
 .PHONY: deb
 deb: version with-upstart
 	cd toor && \
 	fpm -t deb -s dir \
-	    -n $(app) -v `cat ../version` -p ../$(app).deb .
+	    -n $(app) -v `head -n1 ../version` -p ../$(app).deb .
 
 .PHONY: rpm
 rpm: version with-upstart
 	cd toor && \
 	fpm -t rpm -s dir \
-	    -n $(app) -v `cat ../version` -p ../$(app).rpm .
+	    -n $(app) -v `head -n1 ../version` -p ../$(app).rpm .
 
 .PHONY: osx
 osx: version just-jar
 	cd toor && \
-	fpm -t osxpkg --osxpkg-identifier-prefix $(prefix) -s dir \
-	    -n $(app) -v `cat ../version` -p ../$(app).pkg .
+	fpm -t osxpkg --osxpkg-identifier-prefix $(domain) -s dir \
+	    -n $(app) -v `head -n1 ../version` -p ../$(app).pkg .
 
 .PHONY: with-upstart
-with-upstart: just-jar $(app).conf
+with-upstart: just-jar $(app).conf kibana.conf
 	mkdir -p toor/etc/init
-	cp $(app).conf toor/etc/init/
+	cp $(app).conf kibana.conf toor/etc/init/
 
 .PHONY: just-jar
 just-jar: runnable.jar
-	mkdir -p toor/$(prefix)/bin
-	cp $< toor/$(prefix)/bin/$(app)
-	chmod 755 toor/$(prefix)/bin/$(app)
+	mkdir -p toor/usr/bin
+	mkdir -p toor/etc/logstash.d toor/etc/kibana
+	cp $< toor/usr/bin/$(app).jar
+	chmod 755 toor/usr/bin/$(app).jar
 
-runnable.jar:
-	cd marathon && mvn package && bin/build-distribution
-	cp marathon/target/$@ $@
+.PHONY: runnable.jar
+runnable.jar: logstash logstash.jar
+	cat $^ > $@
+
+version: logstash.jar
+	java -jar $< version | sed -n '/^logstash  */ { s/// ; p ;}' > $@
+
+logstash.jar: release
+	curl -fL `cat $<` --output $@
 
