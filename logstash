@@ -32,7 +32,7 @@ function main {
   if [[ ${1:-} = --jar ]]
   then jar="$2" ; shift 2
   fi
-  "$@"
+  run_jar "$@"
 }
 
 function system_agent {
