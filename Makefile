@@ -28,7 +28,7 @@ with-upstart: just-jar $(app).conf kibana.conf
 .PHONY: just-jar
 just-jar: runnable.jar
 	mkdir -p toor/usr/bin
-	mkdir -p toor/etc/logstash.d toor/etc/kibana
+	mkdir -p toor/etc/logstash/agent.d toor/etc/logstash/web
 	cp $< toor/usr/bin/$(app).jar
 	chmod 755 toor/usr/bin/$(app).jar
 
